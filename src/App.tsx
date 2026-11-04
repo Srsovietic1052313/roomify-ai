@@ -1,29 +1,32 @@
+import { useEffect, useState } from "react";
 import { Link, Route, Routes } from "react-router-dom";
-import { useApp } from "./contexto";
+import { api } from "./lib/api";
+import type { EstadoIa } from "./lib/tipos";
 import { Inicio } from "./pages/Inicio";
 import { PaginaProyecto } from "./pages/PaginaProyecto";
 
 export function App() {
-  const { usuario, entrar, salir, error, cargando } = useApp();
+  const [estado, setEstado] = useState<EstadoIa | null>(null);
+
+  useEffect(() => {
+    api.estado().then(setEstado).catch(() => setEstado(null));
+  }, []);
+
   return (
     <>
       <header className="barra">
         <Link to="/" className="marca">Roomify</Link>
-        {!cargando &&
-          (usuario ? (
-            <div className="sesion">
-              <span>{usuario.username}</span>
-              <button className="secundario" onClick={salir}>Salir</button>
-            </div>
-          ) : (
-            <button onClick={entrar}>Iniciar sesión</button>
-          ))}
       </header>
-      {error && <p className="error contenido" role="alert">{error}</p>}
+      {estado?.proveedor === "simulado" && (
+        <p className="aviso">Modo demo: no se usa IA. El «render» es el mismo plano con otro color.</p>
+      )}
+      {estado?.proveedor === "cloudflare" && !estado.configurado && (
+        <p className="aviso">Falta configurar Cloudflare. Sigue los pasos del README para generar renders.</p>
+      )}
       <main className="contenido">
         <Routes>
           <Route path="/" element={<Inicio />} />
-          <Route path="/proyecto/:id" element={<PaginaProyecto />} />
+          <Route path="/proyecto/:id" element={<PaginaProyecto iaLista={estado?.configurado ?? false} />} />
           <Route path="*" element={<p>Esta página no existe. <Link to="/">Volver al inicio</Link></p>} />
         </Routes>
       </main>

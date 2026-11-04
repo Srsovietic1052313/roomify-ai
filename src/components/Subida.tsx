@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent } from "react";
-import { TIPOS_PERMITIDOS } from "../lib/proyectos";
+
+const TIPOS = "image/png,image/jpeg,image/webp";
 
 interface Props {
   ocupado: boolean;
@@ -33,7 +34,7 @@ export function Subida({ ocupado, alElegir }: Props) {
         ref={entrada}
         type="file"
         hidden
-        accept={TIPOS_PERMITIDOS.join(",")}
+        accept={TIPOS}
         aria-label="Plano"
         onChange={(e) => {
           const archivo = e.target.files?.[0];

@@ -1,91 +1,97 @@
 # Roomify
 
-Aplicación web que convierte el plano 2D de una vivienda en un render 3D fotorrealista con IA. Guarda tus proyectos, compara el antes y el después con un deslizador y permite publicar resultados en un feed comunitario.
+Aplicación web que convierte el plano 2D de una vivienda en un render 3D con IA. Guarda tus proyectos en tu computadora y compara el antes y el después con un deslizador.
 
 Inspirada en el video [Build and Deploy a Full-Stack AI App (Completely Free)](https://www.youtube.com/watch?v=JiwTGGGIhDs) de JavaScript Mastery. Es una implementación propia a partir de la descripción del video: no incluye el código ni los recursos de su kit.
 
-**Tecnologías:** React, TypeScript, Vite, React Router y [Puter.js](https://docs.puter.com/) (autenticación, IA, almacenamiento, hosting y workers, sin servidor propio).
+**Tecnologías:** React, TypeScript, Vite, Express, SQLite (`node:sqlite`), sharp y [Workers AI de Cloudflare](https://developers.cloudflare.com/workers-ai/) con FLUX.2.
 
 ## Cómo ejecutarlo
 
+Requiere Node 22.18 o superior.
+
 ```bash
 npm install
-npm run dev
 ```
 
-Abre la dirección que muestra la terminal. Necesitas una cuenta de Puter; el consumo de IA corre por cuenta de cada usuario.
-
-Para ver la interfaz sin cuenta:
+### Ver la app sin cuenta
 
 ```bash
 npm run demo
 ```
 
-El modo demo guarda todo en memoria y **no usa IA**: el "render" es la misma imagen en sepia. Se pierde al recargar.
+Abre http://localhost:5173. El modo demo **no usa IA**: el "render" es el mismo plano con otro color.
 
-```bash
-npm test
-npm run build
-```
+### Usar la IA real
 
-## Activar el feed de la comunidad (opcional)
-
-Sin este paso, todo funciona menos la comunidad. Requiere una cuenta de Puter con el correo verificado.
-
-1. Sube `worker/roomify.worker.js` a tu cuenta de Puter.
-2. Con la sesión abierta y Puter.js cargado, ejecuta en la consola del navegador:
-
-   ```js
-   const d = await puter.workers.create("roomify-api", "roomify.worker.js");
-   console.log(d.url);
-   ```
-
-3. Crea un archivo `.env` con la URL obtenida, siguiendo `.env.example`:
+1. Crea una cuenta en [Cloudflare](https://dash.cloudflare.com/sign-up).
+2. Copia tu **Account ID** desde el panel de Cloudflare.
+3. Crea un **API token** con el permiso **Workers AI** y cópialo.
+4. Copia `.env.example` como `.env` y rellena esos dos datos. Nunca compartas ni subas `.env`.
+5. Ejecuta:
 
    ```bash
-   VITE_PUTER_WORKER_URL=https://tu-worker.puter.work
+   npm run dev
    ```
 
-4. Reinicia `npm run dev`.
+### Producción local y pruebas
 
-Para publicar la app, sube el contenido de `dist/` a un hosting estático que redirija todas las rutas a `index.html`.
+```bash
+npm run build
+npm start
+npm test
+```
+
+Con `npm start`, la app queda en http://localhost:3001. Puedes cambiar el puerto con la variable `API_PORT`.
+
+## Costo
+
+Según la [página de precios](https://developers.cloudflare.com/workers-ai/platform/pricing/) consultada en noviembre de 2026, Workers AI incluye 10 000 Neurons gratis al día y cobra $0.011 por cada 1000 adicionales.
+
+Con 20 pasos y una salida de 1024 × 1024, cada render de FLUX.2 [dev] usaría unos 3400 Neurons, unos $0.04 si se paga. Eso son 2 o 3 renders gratis al día. Es una estimación propia; revisa tu consumo en el panel de Cloudflare.
 
 ## Qué se comprobó
 
-- 12 pruebas automáticas de la lógica y del worker, usando un Puter falso.
+- 16 pruebas automáticas de la API, las validaciones, los errores y el adaptador de Cloudflare, este último con respuestas falsas.
 - Compilación de producción y comprobación de tipos.
-- En el navegador, en modo demo: inicio de sesión, rechazo de un PDF, subida, generación y comparador.
-- Puter.js real se carga y expone las funciones usadas.
+- En el navegador, en modo demo: generación, comparador, lista de proyectos y aviso de modo demo. Esta prueba encontró y corrigió un error que bloqueaba las peticiones.
+- Con peticiones HTTP directas: subida, rechazo de archivos no válidos, eliminación y bloqueo de otros orígenes.
+- `npm start` sin credenciales: sirve la app y avisa de que falta configurarla.
 
-**No se comprobó con una cuenta real de Puter.** Falta confirmar en la práctica el inicio de sesión, la generación con IA, el hosting de imágenes y el worker. Esas llamadas siguen la documentación de Puter de noviembre de 2026. Lo primero que conviene vigilar es `puter_output_path` en `generarRender`.
+**No se comprobó:**
+
+- **Una llamada real a Cloudflare.** Hace falta tu token. La [documentación](https://developers.cloudflare.com/changelog/2025-11-25-flux-2-dev-workers-ai/) confirma el formato de envío, pero no muestra la respuesta completa, así que el código acepta la imagen en `result.image` o en `image`.
+- **La calidad del render.** FLUX.2 podría no respetar con exactitud la distribución del plano.
+- **Elegir un archivo o eliminar desde la interfaz.** La subida y la eliminación se probaron con peticiones directas.
 
 ## Cómo funciona el código
 
-1. **`index.html`** carga Puter.js y arranca React.
-2. **[`src/lib/puter.ts`](src/lib/puter.ts)** entrega el Puter real o, en modo demo, [`puterSimulado.ts`](src/lib/puterSimulado.ts).
-3. **[`src/contexto.tsx`](src/contexto.tsx)** comparte con toda la app el usuario, el servicio y los errores. `entrar` se llama directamente desde un clic porque abre una ventana emergente.
-4. **[`src/App.tsx`](src/App.tsx)** dibuja la barra superior y define las rutas `/` y `/proyecto/:id`.
-5. **[`src/pages/Inicio.tsx`](src/pages/Inicio.tsx)** muestra la zona de subida, tus proyectos y la comunidad.
-6. **[`src/lib/proyectos.ts`](src/lib/proyectos.ts)** contiene la lógica principal:
-   - `validarArchivo` limita el tipo y el tamaño.
-   - `obtenerSubdominio` publica una carpeta una sola vez y recuerda su dirección.
-   - `crear` sube la imagen y guarda solo su URL y sus datos en KV, porque KV admite 399 KB por valor.
-   - `generarRender` envía el plano y las instrucciones al modelo de imagen y guarda el resultado.
-   - `cambiarPublicacion` usa `workers.exec`, que envía la sesión del usuario al worker.
-7. **[`src/pages/PaginaProyecto.tsx`](src/pages/PaginaProyecto.tsx)** ofrece generar, descargar, publicar y eliminar.
-8. **[`src/components/Comparador.tsx`](src/components/Comparador.tsx)** superpone las dos imágenes y recorta la de arriba con `clip-path`, según el deslizador.
-9. **[`worker/roomify.worker.js`](worker/roomify.worker.js)** es el único código de servidor. Guarda el feed en la cuenta del dueño (`me.puter`) y comprueba al usuario (`user.puter`). Valida las URL y permite cambiar o borrar una publicación solo a su autor.
+### Al subir un plano
 
-### Flujo completo
+1. [`Subida.tsx`](src/components/Subida.tsx) recibe el archivo arrastrado o elegido.
+2. [`api.ts`](src/lib/api.ts) lo envía con `POST /api/proyectos`. En desarrollo, Vite reenvía esa ruta a Express.
+3. [`app.ts`](server/app.ts) recibe la petición. Primero, `soloLocal` rechaza las que llegan desde otros sitios web, y `multer` limita el archivo a 10 MB.
+4. `normalizarPlano` en [`imagenes.ts`](server/imagenes.ts) comprueba que el contenido sea una imagen, sin fiarse de la extensión. Lo convierte a PNG y elimina metadatos como el GPS.
+5. La imagen se guarda en `data/imagenes/` y [`db.ts`](server/db.ts) guarda los datos del proyecto en SQLite.
+6. La página navega a `/proyecto/:id`.
 
-```text
-Archivo → validarArchivo → puter.fs.write → carpeta pública (puter.site)
-        → puter.kv.set → /proyecto/:id → puter.ai.txt2img
-        → render guardado → comparador → (opcional) worker → feed público
-```
+### Al generar el render
 
-## Limitaciones
+1. [`PaginaProyecto.tsx`](src/pages/PaginaProyecto.tsx) llama a `POST /api/proyectos/:id/render`.
+2. `crearReferencia` reduce el plano a menos de 512 píxeles, el límite documentado para FLUX.2, y `tamanoRender` calcula la salida con la misma forma.
+3. `crearCloudflare` en [`ia.ts`](server/ia.ts) envía el prompt, la imagen y el tamaño. El token solo existe en el servidor: nunca llega al navegador.
+4. La respuesta en base64 se convierte en bytes, y `normalizarRender` verifica que sea una imagen.
+5. El servidor guarda el render con un nombre nuevo, actualiza SQLite y borra el anterior.
+6. [`Comparador.tsx`](src/components/Comparador.tsx) superpone ambas imágenes y recorta la de arriba con `clip-path`, según el deslizador.
 
-- El feed no tiene moderación. Revísalo antes de abrirlo a desconocidos.
-- Las imágenes de la carpeta publicada son públicas para quien conozca su URL.
-- Al eliminar un proyecto se borran sus datos, pero las imágenes siguen en tu carpeta de Puter.
+### Cambiar de proveedor de IA
+
+`ia.ts` define la interfaz `ProveedorIa`, con la función `generar`. `crearSimulado` (el modo demo) y `crearCloudflare` la cumplen. Para usar otro servicio, añade una función con la misma forma y elígela en [`index.ts`](server/index.ts).
+
+## Diferencias con el video
+
+El video usa Puter.js para todo el backend. Esta versión lo sustituyó porque Puter bloqueó la creación de la cuenta (`signup_blocked`) y no se pudo probar. Consecuencias:
+
+- **No tiene cuentas ni feed comunitario.** Es una app personal, y el servidor solo acepta conexiones de tu computadora.
+- **Requiere tu propia cuenta de Cloudflare.** Cada usuario ya no paga su propio consumo: todo se carga a tu cuenta.
+- **No se puede desplegar tal cual.** Publicarla en internet requeriría añadir inicio de sesión, límites de uso y almacenamiento en la nube. Sin ellos, cualquiera podría gastar tu cuota.

@@ -40,3 +40,4 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .encima-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--superficie); }
 .linea { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--acento); pointer-events: none; }
 .comparador input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.aviso { margin: 0; padding: .6rem 1rem; text-align: center; background: var(--superficie); border-bottom: 1px solid var(--borde); color: var(--tenue); }
