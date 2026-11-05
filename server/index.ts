@@ -18,7 +18,7 @@ const ia = demo
 const app = crearApp({
   repositorio: crearRepositorio(abrirBase(path.join(datos, "roomify.db"))),
   carpetaImagenes: path.join(datos, "imagenes"),
-  ia,
+  obtenerIa: () => ia,
   carpetaWeb: path.resolve("dist"),
 });
 

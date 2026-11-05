@@ -1,4 +1,4 @@
-import type { EstadoIa, Proyecto } from "./tipos";
+import type { Ajustes, EstadoIa, Proyecto } from "./tipos";
 
 async function pedir<T>(ruta: string, opciones?: RequestInit): Promise<T> {
   const respuesta = await fetch(ruta, opciones);
@@ -20,4 +20,11 @@ export const api = {
   },
   generarRender: (id: string) => pedir<Proyecto>(`/api/proyectos/${id}/render`, { method: "POST" }),
   eliminar: (id: string) => pedir<void>(`/api/proyectos/${id}`, { method: "DELETE" }),
+  leerAjustes: () => pedir<Ajustes>("/api/ajustes"),
+  guardarAjustes: (datos: { cuenta: string; token?: string; demo: boolean }) =>
+    pedir<Ajustes>("/api/ajustes", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datos),
+    }),
 };

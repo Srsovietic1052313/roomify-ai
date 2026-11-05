@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { crearApp } from "../server/app.ts";
+import { crearApp, type Ajustes, type DatosAjustes } from "../server/app.ts";
 import { abrirBase, crearRepositorio } from "../server/db.ts";
 import { ErrorApi } from "../server/errores.ts";
 import { crearCloudflare, type ProveedorIa } from "../server/ia.ts";
@@ -18,10 +18,10 @@ let base: string;
 let carpeta: string;
 let ia: ProveedorIa;
 
-function arrancar(iaUsada: ProveedorIa) {
+function arrancar(iaUsada: ProveedorIa, ajustes?: Ajustes) {
   carpeta = mkdtempSync(path.join(os.tmpdir(), "roomify-"));
   ia = iaUsada;
-  const app = crearApp({ repositorio: crearRepositorio(abrirBase(":memory:")), carpetaImagenes: carpeta, ia });
+  const app = crearApp({ repositorio: crearRepositorio(abrirBase(":memory:")), carpetaImagenes: carpeta, obtenerIa: () => ia, ajustes });
   return new Promise<void>((resolver) => {
     servidor = app.listen(0, "127.0.0.1", () => {
       base = `http://127.0.0.1:${(servidor.address() as AddressInfo).port}`;
@@ -129,7 +129,7 @@ describe("sin configurar", () => {
   it("avisa en vez de intentar generar", async () => {
     servidor.close();
     await arrancar(crearCloudflare({}));
-    expect(await (await fetch(`${base}/api/estado`)).json()).toEqual({ proveedor: "cloudflare", configurado: false });
+    expect(await (await fetch(`${base}/api/estado`)).json()).toEqual({ proveedor: "cloudflare", configurado: false, escritorio: false });
     const { id } = await (await subir(await png())).json();
     expect((await fetch(`${base}/api/proyectos/${id}/render`, { method: "POST" })).status).toBe(503);
   });
@@ -173,5 +173,45 @@ describe("Cloudflare", () => {
     await expect(vacia.generar(await pedido())).rejects.toThrow(/no incluía/);
     const caida = crearCloudflare({ cuenta: "a", token: "t", fetch: (async () => { throw new Error("red"); }) as unknown as typeof fetch });
     await expect(caida.generar(await pedido())).rejects.toThrow(/conectar/);
+  });
+});
+
+describe("ajustes de la app de escritorio", () => {
+  function ajustesFalsos() {
+    let datos: DatosAjustes = { cuenta: "", token: "", demo: false };
+    return {
+      leer: () => ({ cuenta: datos.cuenta, tokenGuardado: Boolean(datos.token), demo: datos.demo }),
+      guardar: (nuevos: DatosAjustes) => { datos = { ...nuevos, token: nuevos.token || datos.token }; },
+    };
+  }
+  const enviar = (cuerpo: unknown, cabeceras = {}) =>
+    fetch(`${base}/api/ajustes`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...cabeceras },
+      body: JSON.stringify(cuerpo),
+    });
+
+  it("no existen fuera del escritorio", async () => {
+    expect((await fetch(`${base}/api/ajustes`)).status).toBe(404);
+    expect((await enviar({ cuenta: "abc" })).status).toBe(404);
+  });
+
+  it("guardan los datos y nunca devuelven el token", async () => {
+    servidor.close();
+    await arrancar(iaFalsa(), ajustesFalsos());
+    const r = await enviar({ cuenta: "abc123", token: "secreto", demo: true });
+    expect(r.status).toBe(200);
+    const texto = await r.text();
+    expect(texto).not.toContain("secreto");
+    expect(JSON.parse(texto)).toEqual({ cuenta: "abc123", tokenGuardado: true, demo: true });
+    expect((await (await fetch(`${base}/api/estado`)).json()).escritorio).toBe(true);
+  });
+
+  it("rechazan datos no válidos y otros sitios web", async () => {
+    servidor.close();
+    await arrancar(iaFalsa(), ajustesFalsos());
+    expect((await enviar({ cuenta: "../../x" })).status).toBe(400);
+    expect((await enviar({ cuenta: "abc", token: 5 })).status).toBe(400);
+    expect((await enviar({ cuenta: "abc" }, { Origin: "https://malicioso.example" })).status).toBe(403);
   });
 });

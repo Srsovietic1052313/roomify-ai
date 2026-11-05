@@ -6,7 +6,34 @@ Inspirada en el video [Build and Deploy a Full-Stack AI App (Completely Free)](h
 
 **Tecnologías:** React, TypeScript, Vite, Express, SQLite (`node:sqlite`), sharp y [Workers AI de Cloudflare](https://developers.cloudflare.com/workers-ai/) con FLUX.2.
 
-## Cómo ejecutarlo
+## Descargar la app de escritorio
+
+No necesitas instalar Python ni Node:
+
+1. Descarga [**Roomify.exe**](https://github.com/Srsovietic1052313/roomify-ai/releases/latest/download/Roomify.exe) (unos 110 MB).
+2. Haz doble clic.
+
+Windows puede mostrar una advertencia de SmartScreen porque el ejecutable no tiene firma digital. Pulsa **Más información** y luego **Ejecutar de todas formas** solo si lo descargaste de este repositorio.
+
+Abre **Ajustes** y elige una opción:
+
+- **Modo demo:** márcalo para ver la app sin cuenta. No usa IA.
+- **IA real:** escribe tu Account ID y tu API token de Cloudflare. El token se guarda cifrado por Windows para tu usuario.
+
+La app tarda unos 15 segundos en abrir.
+
+**Tus datos:** los proyectos, imágenes y ajustes se guardan en `%APPDATA%\Roomify`.
+
+**Crear el ejecutable tú mismo:**
+
+```bash
+npm install
+npm run empaquetar
+```
+
+**Qué se comprobó en el ejecutable:** ajustes, subida, render en modo demo, comparador y eliminación. **Sigue sin probarse una llamada real a Cloudflare.**
+
+## Ejecutarlo desde el código
 
 Requiere Node 22.18 o superior.
 
@@ -52,7 +79,7 @@ Con 20 pasos y una salida de 1024 × 1024, cada render de FLUX.2 [dev] usaría u
 
 ## Qué se comprobó
 
-- 16 pruebas automáticas de la API, las validaciones, los errores y el adaptador de Cloudflare, este último con respuestas falsas.
+- 23 pruebas automáticas de la API, los ajustes, las validaciones, los errores y el adaptador de Cloudflare, este último con respuestas falsas.
 - Compilación de producción y comprobación de tipos.
 - En el navegador, en modo demo: generación, comparador, lista de proyectos y aviso de modo demo. Esta prueba encontró y corrigió un error que bloqueaba las peticiones.
 - Con peticiones HTTP directas: subida, rechazo de archivos no válidos, eliminación y bloqueo de otros orígenes.
@@ -62,7 +89,6 @@ Con 20 pasos y una salida de 1024 × 1024, cada render de FLUX.2 [dev] usaría u
 
 - **Una llamada real a Cloudflare.** Hace falta tu token. La [documentación](https://developers.cloudflare.com/changelog/2025-11-25-flux-2-dev-workers-ai/) confirma el formato de envío, pero no muestra la respuesta completa, así que el código acepta la imagen en `result.image` o en `image`.
 - **La calidad del render.** FLUX.2 podría no respetar con exactitud la distribución del plano.
-- **Elegir un archivo o eliminar desde la interfaz.** La subida y la eliminación se probaron con peticiones directas.
 
 ## Cómo funciona el código
 
@@ -84,6 +110,10 @@ Con 20 pasos y una salida de 1024 × 1024, cada render de FLUX.2 [dev] usaría u
 5. El servidor guarda el render con un nombre nuevo, actualiza SQLite y borra el anterior.
 6. [`Comparador.tsx`](src/components/Comparador.tsx) superpone ambas imágenes y recorta la de arriba con `clip-path`, según el deslizador.
 
+### La app de escritorio
+
+[`desktop/main.ts`](desktop/main.ts) arranca el mismo servidor Express dentro de Electron, en un puerto libre de `127.0.0.1`, y lo muestra en una ventana. [`desktop/ajustes.ts`](desktop/ajustes.ts) guarda el token cifrado con `safeStorage`.
+
 ### Cambiar de proveedor de IA
 
 `ia.ts` define la interfaz `ProveedorIa`, con la función `generar`. `crearSimulado` (el modo demo) y `crearCloudflare` la cumplen. Para usar otro servicio, añade una función con la misma forma y elígela en [`index.ts`](server/index.ts).
@@ -94,4 +124,5 @@ El video usa Puter.js para todo el backend. Esta versión lo sustituyó porque P
 
 - **No tiene cuentas ni feed comunitario.** Es una app personal, y el servidor solo acepta conexiones de tu computadora.
 - **Requiere tu propia cuenta de Cloudflare.** Cada usuario ya no paga su propio consumo: todo se carga a tu cuenta.
+- **La app de escritorio no necesita `.env`.** Las credenciales se escriben en **Ajustes**.
 - **No se puede desplegar tal cual.** Publicarla en internet requeriría añadir inicio de sesión, límites de uso y almacenamiento en la nube. Sin ellos, cualquiera podría gastar tu cuota.

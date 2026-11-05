@@ -12,11 +12,25 @@ import { crearReferencia, normalizarPlano, normalizarRender, tamanoRender } from
 const TAMANO_MAXIMO = 10 * 1024 * 1024;
 const HOSTS_LOCALES = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
+export interface DatosAjustes {
+  cuenta: string;
+  /** Vacío o ausente: conserva el token guardado. */
+  token?: string;
+  demo: boolean;
+}
+
+/** Solo existe en la app de escritorio, donde las credenciales se guardan cifradas. */
+export interface Ajustes {
+  leer(): { cuenta: string; tokenGuardado: boolean; demo: boolean };
+  guardar(datos: DatosAjustes): void;
+}
+
 interface Dependencias {
   repositorio: Repositorio;
   carpetaImagenes: string;
-  ia: ProveedorIa;
+  obtenerIa: () => ProveedorIa;
   carpetaWeb?: string;
+  ajustes?: Ajustes;
 }
 
 const paraCliente = (p: Proyecto) => ({
@@ -46,7 +60,7 @@ function soloLocal(peticion: Request, respuesta: Response, siguiente: NextFuncti
   siguiente();
 }
 
-export function crearApp({ repositorio, carpetaImagenes, ia, carpetaWeb }: Dependencias) {
+export function crearApp({ repositorio, carpetaImagenes, obtenerIa, carpetaWeb, ajustes }: Dependencias) {
   const app = express();
   const subida = multer({ storage: multer.memoryStorage(), limits: { fileSize: TAMANO_MAXIMO, files: 1 } });
 
@@ -61,7 +75,26 @@ export function crearApp({ repositorio, carpetaImagenes, ia, carpetaWeb }: Depen
   app.use("/imagenes", express.static(carpetaImagenes, { fallthrough: false, immutable: true, maxAge: "1y", setHeaders: (r) => r.setHeader("X-Content-Type-Options", "nosniff") }));
 
   app.get("/api/estado", (_peticion, respuesta) => {
-    respuesta.json({ proveedor: ia.nombre, configurado: ia.configurado });
+    const ia = obtenerIa();
+    respuesta.json({ proveedor: ia.nombre, configurado: ia.configurado, escritorio: Boolean(ajustes) });
+  });
+
+  app.get("/api/ajustes", (_peticion, respuesta) => {
+    if (!ajustes) throw new ErrorApi(404, "Ruta no encontrada.");
+    respuesta.json(ajustes.leer());
+  });
+
+  app.put("/api/ajustes", express.json({ limit: "10kb" }), (peticion, respuesta) => {
+    if (!ajustes) throw new ErrorApi(404, "Ruta no encontrada.");
+    const { cuenta, token, demo } = peticion.body ?? {};
+    if (typeof cuenta !== "string" || cuenta.length > 100 || (cuenta && !/^[a-f0-9]+$/i.test(cuenta.trim()))) {
+      throw new ErrorApi(400, "El Account ID no parece válido.");
+    }
+    if (token !== undefined && (typeof token !== "string" || token.length > 500)) {
+      throw new ErrorApi(400, "El token no parece válido.");
+    }
+    ajustes.guardar({ cuenta: cuenta.trim(), token: token?.trim(), demo: demo === true });
+    respuesta.json(ajustes.leer());
   });
 
   app.get("/api/proyectos", (_peticion, respuesta) => {
@@ -96,6 +129,7 @@ export function crearApp({ repositorio, carpetaImagenes, ia, carpetaWeb }: Depen
 
   app.post("/api/proyectos/:id/render", async (peticion, respuesta) => {
     const proyecto = obtenerProyecto(peticion.params.id);
+    const ia = obtenerIa();
     if (!ia.configurado) throw new ErrorApi(503, "Falta configurar el servicio de IA.");
 
     const plano = await readFile(path.join(carpetaImagenes, proyecto.plantaArchivo));
